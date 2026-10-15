@@ -12,7 +12,6 @@ metadata:
     repository: 'https://github.com/analogjs/angular-skills'
     path: skills/angular-di
     license_path: LICENSE
-    commit: 610c90eb9490194bcff703f343f97fa0e00bdb2f
 ---
 
 # Angular Dependency Injection
@@ -38,7 +37,7 @@ export class UserList {
   // Inject dependencies
   private http = inject(HttpClient);
   private userService = inject(User);
-
+  
   // Can use immediately
   users = this.userService.getUsers();
 }
@@ -55,10 +54,10 @@ import { HttpClient } from '@angular/common/http';
 })
 export class User {
   private http = inject(HttpClient);
-
+  
   private users = signal<User[]>([]);
   readonly users$ = this.users.asReadonly();
-
+  
   async loadUsers() {
     const users = await firstValueFrom(
       this.http.get<User[]>('/api/users')
@@ -174,7 +173,7 @@ export class Api {
   private apiUrl = inject(API_URL);
   private config = inject(APP_CONFIG);
   private window = inject(WINDOW);
-
+  
   getBaseUrl(): string {
     return this.apiUrl;
   }
@@ -250,7 +249,7 @@ providers: [
 export class My {
   // Returns null if not provided
   private analytics = inject(Analytics, { optional: true });
-
+  
   trackEvent(name: string) {
     this.analytics?.track(name);
   }
@@ -297,7 +296,7 @@ providers: [
 @Injectable()
 export class Validation {
   private validators = inject(VALIDATORS); // Validator[]
-
+  
   validate(value: string): ValidationError[] {
     return this.validators
       .map(v => v.validate(value))
@@ -366,7 +365,7 @@ import { createEnvironmentInjector, EnvironmentInjector, inject } from '@angular
 @Injectable({ providedIn: 'root' })
 export class Plugin {
   private parentInjector = inject(EnvironmentInjector);
-
+  
   loadPlugin(providers: Provider[]): EnvironmentInjector {
     return createEnvironmentInjector(providers, this.parentInjector);
   }
@@ -383,7 +382,7 @@ import { runInInjectionContext, EnvironmentInjector, inject } from '@angular/cor
 @Injectable({ providedIn: 'root' })
 export class Utility {
   private injector = inject(EnvironmentInjector);
-
+  
   executeWithDI<T>(fn: () => T): T {
     return runInInjectionContext(this.injector, fn);
   }

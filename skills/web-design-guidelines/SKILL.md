@@ -12,8 +12,6 @@ metadata:
   source:
     repository: 'https://github.com/vercel-labs/agent-skills'
     path: skills/web-design-guidelines
-    commit: f8a72b9603728bb92a217a879b7e62e43ad76c81
-license: MIT
 ---
 
 # Web Interface Guidelines

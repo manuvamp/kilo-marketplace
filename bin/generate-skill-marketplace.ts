@@ -7,69 +7,78 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 import matter from "gray-matter";
-import {
-  archive,
-  foldedScalar,
-  generateMarketplace,
-  listVisibleDirectories,
-  loadMcpIds,
-  repoPathFromBin,
-  validateRequirements,
-  validateSuggestFor,
-} from "./marketplace-generator-utils.ts";
+import { Document, Scalar } from "yaml";
 
-const skillsDir = repoPathFromBin("skills");
-const mcpsDir = repoPathFromBin("mcps");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const skillsDir = path.join(__dirname, "..", "skills");
 
 const GITHUB_BASE_URL =
   "https://github.com/Kilo-Org/kilo-marketplace/tree/main/skills";
 const RAW_BASE_URL =
   "https://raw.githubusercontent.com/Kilo-Org/kilo-marketplace/main/skills";
+const CONTENT_BASE_URL =
+  "https://github.com/Kilo-Org/kilo-marketplace/releases/download/skills-latest";
 
-const skillIds = new Set(listVisibleDirectories(skillsDir));
-const mcpIds = loadMcpIds(mcpsDir);
-const declaredNames = new Set<string>();
-generateMarketplace({
-  rootDir: skillsDir,
-  parseItem: (dirName) => {
-    const { data } = matter(
-      fs.readFileSync(path.join(skillsDir, dirName, "SKILL.md"), "utf-8"),
+// Create a folded block scalar with strip chomping (>-)
+function foldedScalar(value: string): Scalar {
+  const scalar = new Scalar(value);
+  scalar.type = Scalar.BLOCK_FOLDED;
+  scalar.blockChomping = "strip";
+  return scalar;
+}
+
+function validateSuggestFor(value: unknown, skillId: string): unknown {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${skillId}: metadata.suggest_for must be an object`);
+  }
+
+  const extensions = (value as { extension?: unknown }).extension;
+  if (
+    !Array.isArray(extensions) ||
+    extensions.length === 0 ||
+    !extensions.every(
+      (extension) =>
+        typeof extension === "string" &&
+        /^\*\.[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*$/.test(extension),
+    )
+  ) {
+    throw new Error(
+      `${skillId}: metadata.suggest_for.extension must be a non-empty list of patterns like "*.rb"`,
     );
-    if (data.name !== dirName) {
-      throw new Error(
-        `${dirName}/SKILL.md: name must match directory (found "${data.name ?? "missing"}")`,
-      );
-    }
-    if (declaredNames.has(data.name)) {
-      throw new Error(`Duplicate skill name: ${data.name}`);
-    }
-    declaredNames.add(data.name);
-    const requirements = validateRequirements(
-      data.requirements,
-      dirName,
-      skillIds,
-      mcpIds,
-      { subgroup: "skills", id: dirName },
+  }
+
+  return value;
+}
+
+const items = fs
+  .readdirSync(skillsDir, { withFileTypes: true })
+  .filter((d) => d.isDirectory() && !d.name.startsWith("."))
+  .map((dir) => {
+    const { data } = matter(
+      fs.readFileSync(path.join(skillsDir, dir.name, "SKILL.md"), "utf-8"),
     );
     console.log(`Added: ${data.name}`);
     return {
-      id: dirName,
+      id: dir.name,
       description: foldedScalar(data.description),
       category: data.metadata?.category || undefined,
-      suggest_for: validateSuggestFor(data.metadata?.suggest_for, dirName, {
-        fieldName: "metadata.suggest_for",
-        filenameExample: "*.rb",
-      }),
-      requirements,
-      githubUrl: `${GITHUB_BASE_URL}/${dirName}`,
-      rawUrl: `${RAW_BASE_URL}/${dirName}/SKILL.md`,
-      content: archive(dirName),
+      suggest_for: validateSuggestFor(data.metadata?.suggest_for, dir.name),
+      githubUrl: `${GITHUB_BASE_URL}/${dir.name}`,
+      rawUrl: `${RAW_BASE_URL}/${dir.name}/SKILL.md`,
+      content: `${CONTENT_BASE_URL}/${dir.name}.tar.gz`,
     };
-  },
-  sortItems: (a, b) => {
+  })
+  .sort((a, b) => {
     const catCmp = (a.category || "zzz").localeCompare(b.category || "zzz");
     return catCmp !== 0 ? catCmp : a.id.localeCompare(b.id);
-  },
-  finalMessage: (count) => `\nGenerated marketplace.yaml with ${count} skills`,
-});
+  });
+
+const doc = new Document({ items });
+const output = doc.toString({ lineWidth: 120 });
+
+fs.writeFileSync(path.join(skillsDir, "marketplace.yaml"), output);
+
+console.log(`\nGenerated marketplace.yaml with ${items.length} skills`);

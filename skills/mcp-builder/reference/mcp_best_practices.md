@@ -181,7 +181,7 @@ MCP servers support multiple transport mechanisms for different deployment scena
 
 **Use when**:
 - Building tools for local development environments
-- Integrating with desktop MCP clients
+- Integrating with desktop applications (e.g., Claude Desktop)
 - Creating command-line utilities
 - Single-user, single-session scenarios
 

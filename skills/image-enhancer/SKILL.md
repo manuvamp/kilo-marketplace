@@ -9,8 +9,6 @@ metadata:
   source:
     repository: 'https://github.com/ComposioHQ/awesome-claude-skills'
     path: image-enhancer
-    commit: 92568c1edaff1bde5371154f036d959346c145a8
-license: NOASSERTION
 ---
 
 # Image Enhancer
