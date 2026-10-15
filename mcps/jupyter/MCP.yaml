@@ -5,8 +5,7 @@ suggest_for:
   filename:
     - "*.ipynb"
   vscode_extension:
-    - name: Jupyter
-      id: ms-toolsai.jupyter
+    - ms-toolsai.jupyter
 author: jupyter-ai-contrib
 url: https://github.com/jupyter-ai-contrib/jupyter-server-mcp
 category: data
