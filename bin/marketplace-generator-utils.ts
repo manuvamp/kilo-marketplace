@@ -27,7 +27,6 @@ type SelfRequirement = {
 
 type GenerateMarketplaceOptions<T> = {
   rootDir: string;
-  directories?: string[];
   outputFile?: string;
   parseItem: (dirName: string) => T;
   sortItems?: (a: T, b: T) => number;
@@ -50,17 +49,8 @@ export const AGENT_CATEGORIES = new Set([
   "creative-media",
 ]);
 
-export const PLUGIN_CATEGORIES = new Set([
-  ...MARKETPLACE_CATEGORIES,
-  "providers",
-]);
-
 export function repoPathFromBin(...segments: string[]): string {
   return path.join(BIN_DIR, "..", ...segments);
-}
-
-export function archive(id: string): string {
-  return `https://github.com/Kilo-Org/kilo-marketplace/releases/download/skills-latest/${id}.tar.gz`;
 }
 
 export function listVisibleDirectories(rootDir: string): string[] {
@@ -104,7 +94,7 @@ export function writeMarketplaceYaml(
 }
 
 export function generateMarketplace<T>(options: GenerateMarketplaceOptions<T>): T[] {
-  const items = (options.directories ?? listVisibleDirectories(options.rootDir)).map(options.parseItem);
+  const items = listVisibleDirectories(options.rootDir).map(options.parseItem);
   if (options.sortItems) items.sort(options.sortItems);
 
   writeMarketplaceYaml(
@@ -175,7 +165,7 @@ export function isValidVscodeExtension(entry: unknown): boolean {
 export function foldedScalar(value: string): Scalar {
   const scalar = new Scalar(value);
   scalar.type = Scalar.BLOCK_FOLDED;
-  Object.assign(scalar, { blockChomping: "strip" });
+  scalar.blockChomping = "strip";
   return scalar;
 }
 

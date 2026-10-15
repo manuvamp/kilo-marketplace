@@ -9,7 +9,6 @@ import * as fs from "fs";
 import * as path from "path";
 import matter from "gray-matter";
 import {
-  archive,
   foldedScalar,
   generateMarketplace,
   listVisibleDirectories,
@@ -26,6 +25,8 @@ const GITHUB_BASE_URL =
   "https://github.com/Kilo-Org/kilo-marketplace/tree/main/skills";
 const RAW_BASE_URL =
   "https://raw.githubusercontent.com/Kilo-Org/kilo-marketplace/main/skills";
+const CONTENT_BASE_URL =
+  "https://github.com/Kilo-Org/kilo-marketplace/releases/download/skills-latest";
 
 const skillIds = new Set(listVisibleDirectories(skillsDir));
 const mcpIds = loadMcpIds(mcpsDir);
@@ -64,7 +65,7 @@ generateMarketplace({
       requirements,
       githubUrl: `${GITHUB_BASE_URL}/${dirName}`,
       rawUrl: `${RAW_BASE_URL}/${dirName}/SKILL.md`,
-      content: archive(dirName),
+      content: `${CONTENT_BASE_URL}/${dirName}.tar.gz`,
     };
   },
   sortItems: (a, b) => {
