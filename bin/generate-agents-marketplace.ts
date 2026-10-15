@@ -7,34 +7,32 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 import matter from "gray-matter";
-import {
-  AGENT_CATEGORIES,
-  buildCategorySummary,
-  generateMarketplace,
-  listVisibleDirectories,
-  loadMcpIds,
-  type MarketplaceRequirements,
-  repoPathFromBin,
-  requireString,
-  validateRequirements,
-  validateSuggestFor,
-} from "./marketplace-generator-utils.ts";
+import { Document } from "yaml";
 
-const agentsDir = repoPathFromBin("agents");
-const skillsDir = repoPathFromBin("skills");
-const mcpsDir = repoPathFromBin("mcps");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const agentsDir = path.join(__dirname, "..", "agents");
 
 const AGENT_MODES = new Set(["primary", "subagent", "all"]);
+const AGENT_CATEGORIES = new Set([
+  "business",
+  "creative-media",
+  "data",
+  "development",
+  "observability",
+  "productivity",
+  "search",
+  "web-automation",
+]);
 const AGENT_CONFIG_KEYS = ["model", "variant", "temperature", "top_p", "permission", "color", "steps", "hidden"];
-const MARKETPLACE_KEYS = ["author", "authorUrl", "prerequisites"];
+const MARKETPLACE_KEYS = ["author", "authorUrl", "tags", "prerequisites"];
 
 type AgentContent = {
   mode: "primary" | "subagent" | "all";
   description: string;
   prompt: string;
   options: Record<string, unknown>;
-  requirements?: MarketplaceRequirements;
   model?: string;
   variant?: string;
   temperature?: number;
@@ -52,14 +50,17 @@ type MarketplaceAgent = {
   category: string;
   author?: string;
   authorUrl?: string;
-  tags: string[];
-  suggest_for?: unknown;
+  tags?: string[];
   prerequisites?: string[];
   content: AgentContent;
 };
 
-const skillIds = new Set(listVisibleDirectories(skillsDir));
-const mcpIds = loadMcpIds(mcpsDir);
+function requireString(value: unknown, field: string, file: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${file}: missing required string field ${field}`);
+  }
+  return value;
+}
 
 function agentFromMarkdown(dirName: string): MarketplaceAgent {
   const file = path.join(agentsDir, dirName, "AGENT_DEFINITION.md");
@@ -74,9 +75,6 @@ function agentFromMarkdown(dirName: string): MarketplaceAgent {
 
   if (!AGENT_CATEGORIES.has(category)) {
     throw new Error(`${file}: invalid category "${category}"`);
-  }
-  if (frontmatter.tags !== undefined) {
-    throw new Error(`${file}: use category instead of tags`);
   }
   if (id !== dirName) {
     throw new Error(`${file}: id must match directory name (${dirName})`);
@@ -94,12 +92,6 @@ function agentFromMarkdown(dirName: string): MarketplaceAgent {
   if (!options || typeof options !== "object" || Array.isArray(options)) {
     throw new Error(`${file}: options must be an object`);
   }
-  const requirements = validateRequirements(
-    frontmatter.requirements,
-    id,
-    skillIds,
-    mcpIds,
-  );
 
   const agentContent: Record<string, unknown> = {
     mode,
@@ -111,7 +103,6 @@ function agentFromMarkdown(dirName: string): MarketplaceAgent {
       id,
     },
   };
-  if (requirements !== undefined) agentContent.requirements = requirements;
 
   for (const key of AGENT_CONFIG_KEYS) {
     if (frontmatter[key] !== undefined) agentContent[key] = frontmatter[key];
@@ -122,11 +113,6 @@ function agentFromMarkdown(dirName: string): MarketplaceAgent {
     name,
     description,
     category,
-    tags: [category],
-    suggest_for: validateSuggestFor(frontmatter.suggest_for, id, {
-      fieldName: "suggest_for",
-      filenameExample: "*.ipynb",
-    }),
     content: agentContent,
   };
   for (const key of MARKETPLACE_KEYS) {
@@ -136,21 +122,38 @@ function agentFromMarkdown(dirName: string): MarketplaceAgent {
   return agent as MarketplaceAgent;
 }
 
-generateMarketplace({
-  rootDir: agentsDir,
-  parseItem: (dirName) => {
-    const agent = agentFromMarkdown(dirName);
+const items = fs
+  .readdirSync(agentsDir, { withFileTypes: true })
+  .filter((d) => d.isDirectory() && !d.name.startsWith("."))
+  .map((dir) => {
+    const agent = agentFromMarkdown(dir.name);
     console.log(`Added: ${agent.name}`);
     return agent;
-  },
-  sortItems: (a, b) => a.id.localeCompare(b.id),
-  header: (items) =>
-    buildCategorySummary(items, {
-      title: "Agent category usage",
-      resourceNameSingular: "agent",
-      resourceNamePlural: "agents",
-      scriptName: "bin/generate-agents-marketplace.ts",
-      singleCategoryAware: true,
-    }),
-  finalMessage: (count) => `\nGenerated marketplace.yaml with ${count} agents`,
-});
+  })
+  .sort((a, b) => a.id.localeCompare(b.id));
+
+const categoryCounts = new Map<string, number>();
+for (const item of items) {
+  categoryCounts.set(item.category, (categoryCounts.get(item.category) ?? 0) + 1);
+}
+
+const categorySummary = [
+  "# Agent category usage",
+  "#",
+  `# ${items.length} agents across ${categoryCounts.size} ${categoryCounts.size === 1 ? "category" : "categories"}. Each agent has one primary category.`,
+  "# This summary is generated by bin/generate-agents-marketplace.ts; do not edit it manually.",
+  "#",
+  ...[...categoryCounts]
+    .sort(([categoryA, countA], [categoryB, countB]) =>
+      countB - countA || categoryA.localeCompare(categoryB),
+    )
+    .map(([category, count]) => `# - ${category}: ${count}`),
+  "#",
+].join("\n");
+
+const doc = new Document({ items });
+const output = `${categorySummary}\n${doc.toString({ lineWidth: 120 })}`;
+
+fs.writeFileSync(path.join(agentsDir, "marketplace.yaml"), output);
+
+console.log(`\nGenerated marketplace.yaml with ${items.length} agents`);
