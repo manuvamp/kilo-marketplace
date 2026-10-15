@@ -16,7 +16,7 @@ type SuggestForOptions = {
 
 export type MarketplaceRequirements = {
   skills?: string[];
-  vscode_extensions?: Array<{ name: string; id: string }>;
+  vscode_extensions?: string[];
   mcps?: string[];
 };
 
@@ -27,7 +27,6 @@ type SelfRequirement = {
 
 type GenerateMarketplaceOptions<T> = {
   rootDir: string;
-  directories?: string[];
   outputFile?: string;
   parseItem: (dirName: string) => T;
   sortItems?: (a: T, b: T) => number;
@@ -50,17 +49,8 @@ export const AGENT_CATEGORIES = new Set([
   "creative-media",
 ]);
 
-export const PLUGIN_CATEGORIES = new Set([
-  ...MARKETPLACE_CATEGORIES,
-  "providers",
-]);
-
 export function repoPathFromBin(...segments: string[]): string {
   return path.join(BIN_DIR, "..", ...segments);
-}
-
-export function archive(id: string): string {
-  return `https://github.com/Kilo-Org/kilo-marketplace/releases/download/skills-latest/${id}.tar.gz`;
 }
 
 export function listVisibleDirectories(rootDir: string): string[] {
@@ -104,7 +94,7 @@ export function writeMarketplaceYaml(
 }
 
 export function generateMarketplace<T>(options: GenerateMarketplaceOptions<T>): T[] {
-  const items = (options.directories ?? listVisibleDirectories(options.rootDir)).map(options.parseItem);
+  const items = listVisibleDirectories(options.rootDir).map(options.parseItem);
   if (options.sortItems) items.sort(options.sortItems);
 
   writeMarketplaceYaml(
@@ -157,25 +147,10 @@ export function requireString(value: unknown, field: string, file: string): stri
   return value;
 }
 
-const VSCODE_EXTENSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9-]*$/;
-
-/** Returns true if `entry` is a valid `{ name, id }` VS Code extension object. */
-export function isValidVscodeExtension(entry: unknown): boolean {
-  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
-  const extension = entry as Record<string, unknown>;
-  return (
-    Object.keys(extension).every((key) => key === "name" || key === "id") &&
-    typeof extension.name === "string" &&
-    extension.name.trim().length > 0 &&
-    typeof extension.id === "string" &&
-    VSCODE_EXTENSION_ID_PATTERN.test(extension.id)
-  );
-}
-
 export function foldedScalar(value: string): Scalar {
   const scalar = new Scalar(value);
   scalar.type = Scalar.BLOCK_FOLDED;
-  Object.assign(scalar, { blockChomping: "strip" });
+  scalar.blockChomping = "strip";
   return scalar;
 }
 
@@ -206,20 +181,11 @@ export function validateRequirements(
   for (const subgroup of supportedSubgroups) {
     if (!Object.prototype.hasOwnProperty.call(requirements, subgroup)) continue;
     const entries = requirements[subgroup];
-    if (!Array.isArray(entries) || entries.length === 0) {
-      throw new Error(`${itemId}: requirements.${subgroup} must be a non-empty list`);
-    }
-
-    if (subgroup === "vscode_extensions") {
-      if (!entries.every(isValidVscodeExtension)) {
-        throw new Error(
-          `${itemId}: requirements.vscode_extensions entries must contain a non-empty name and a valid extension ID like "ms-toolsai.jupyter"`,
-        );
-      }
-      continue;
-    }
-
-    if (!entries.every((entry) => typeof entry === "string" && entry.trim().length > 0)) {
+    if (
+      !Array.isArray(entries) ||
+      entries.length === 0 ||
+      !entries.every((entry) => typeof entry === "string" && entry.trim().length > 0)
+    ) {
       throw new Error(
         `${itemId}: requirements.${subgroup} must be a non-empty list of non-empty strings`,
       );
@@ -232,13 +198,15 @@ export function validateRequirements(
       throw new Error(`${itemId}: requirements.${subgroup} must not reference itself`);
     }
 
-    const availableIds = subgroup === "skills" ? skillIds : mcpIds;
-    const unknownId = entries.find((entry) => !availableIds.has(entry));
-    if (unknownId) {
-      const resource = subgroup === "skills" ? "skill" : "MCP";
-      throw new Error(
-        `${itemId}: requirements.${subgroup} references unknown ${resource} ID "${unknownId}"`,
-      );
+    const availableIds = subgroup === "skills" ? skillIds : subgroup === "mcps" ? mcpIds : undefined;
+    if (availableIds) {
+      const unknownId = entries.find((entry) => !availableIds.has(entry));
+      if (unknownId) {
+        const resource = subgroup === "skills" ? "skill" : "MCP";
+        throw new Error(
+          `${itemId}: requirements.${subgroup} references unknown ${resource} ID "${unknownId}"`,
+        );
+      }
     }
   }
 
@@ -284,17 +252,19 @@ export function validateSuggestFor(
     );
   }
 
-  if (vscodeExtensions !== undefined) {
-    if (!Array.isArray(vscodeExtensions) || vscodeExtensions.length === 0) {
-      throw new Error(
-        `${itemId}: ${options.fieldName}.vscode_extension must be a non-empty list`,
-      );
-    }
-    if (!vscodeExtensions.every(isValidVscodeExtension)) {
-      throw new Error(
-        `${itemId}: ${options.fieldName}.vscode_extension entries must contain a non-empty name and a valid extension ID like "ms-toolsai.jupyter"`,
-      );
-    }
+  if (
+    vscodeExtensions !== undefined &&
+    (!Array.isArray(vscodeExtensions) ||
+      vscodeExtensions.length === 0 ||
+      !vscodeExtensions.every(
+        (extensionId) =>
+          typeof extensionId === "string" &&
+          /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9-]*$/.test(extensionId),
+      ))
+  ) {
+    throw new Error(
+      `${itemId}: ${options.fieldName}.vscode_extension must be a non-empty list of extension IDs like "ms-toolsai.jupyter"`,
+    );
   }
 
   return value;
